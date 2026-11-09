@@ -1,0 +1,59 @@
+name: Weekly Patch Release
+
+on:
+  schedule:
+    # Mondays 07:00 UTC (08:00 Europe/Berlin in winter)
+    - cron: '0 7 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: weekly-patch-release
+  cancel-in-progress: false
+
+jobs:
+  patch-release:
+    runs-on: self-hosted
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v3.3.0
+        with:
+          client-id: ${{ secrets.RENOVATE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_APP_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          fetch-depth: 0
+
+      - name: Create patch release if dependencies changed
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          LAST_VER=$(git tag --list 'v*.*.*' '[0-9]*.[0-9]*.[0-9]*' | sed 's/^v//' | sort -uV | tail -n 1)
+          if [ -z "$LAST_VER" ]; then
+            echo "No release tag found, skipping."
+            exit 0
+          fi
+          LAST_TAG=$(git tag --list "v${LAST_VER}" "${LAST_VER}" | head -n 1)
+          echo "Last release tag: $LAST_TAG"
+          if [ -z "$(git diff --name-only "$LAST_TAG"..HEAD -- Dockerfile)" ]; then
+            echo "No dependency updates since $LAST_TAG, skipping."
+            exit 0
+          fi
+          NEXT="$(echo "$LAST_VER" | awk -F. '{printf "%d.%d.%d", $1, $2, $3+1}')"
+          echo "Creating patch release $NEXT"
+          USER_ID=$(gh api "/users/${APP_SLUG}[bot]" --jq .id)
+          git config user.name "${APP_SLUG}[bot]"
+          git config user.email "${USER_ID}+${APP_SLUG}[bot]@users.noreply.github.com"
+          # The image is built from the tag at release time,
+          # so tagging is sufficient to cut the release.
+          git tag -a "$NEXT" -m "$NEXT"
+          git push origin "$NEXT"
