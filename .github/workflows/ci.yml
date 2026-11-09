@@ -1,0 +1,49 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # NOTE: This workflow intentionally does not push. Release tags
+      # (major, major.minor, major.minor.patch, latest) are published
+      # by the Release Image workflow on tag pushes only.
+      - name: Build image for scan
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          push: false
+          pull: true
+          tags: ghcr.io/odit-services/docker-backup-files:ci
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: ghcr.io/odit-services/docker-backup-files:ci
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '1'
+          # Skip actions/cache (GHA cache hangs on self-hosted runners).
+          # DB persists on runner disk via cache-dir instead.
+          cache: 'false'
+          cache-dir: /var/tmp/trivy-cache
