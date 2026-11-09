@@ -10,7 +10,7 @@ RUN ARCH=`uname -m` && \
     else \
         export ARCH="arm64"; \
     fi; \
-    apk add --no-cache tar=1.35-r2 gzip=1.13-r0 bash=5.2.26-r0 curl=8.9.1-r2 jq=1.7.1-r0 && \
+    apk add --no-cache tar=1.35-r5 gzip=1.15-r0 bash=5.3.9-r1 curl=8.23.0-r0 jq=1.8.2-r0 && \
     curl "https://dl.min.io/client/mc/release/linux-${ARCH}/mc" -o /bin/mc && \
     chmod +x /bin/mc
 COPY --chown=backup:backup *.sh /
